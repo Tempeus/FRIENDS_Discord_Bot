@@ -73,7 +73,7 @@ async def list_challenges(ctx):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-@bot.command(name='completed_challenges')
+@bot.command(name='completed_list')
 async def completed_challenges(ctx):
     try:
         # Retrieve completed challenges from the database
