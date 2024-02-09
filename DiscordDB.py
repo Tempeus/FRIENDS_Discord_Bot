@@ -31,10 +31,8 @@ class DiscordDatabase:
         # Create user_points table
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_points (
-                user_id INTEGER,
-                challenge_id INTEGER,
-                FOREIGN KEY(challenge_id) REFERENCES challenges(id),
-                PRIMARY KEY (user_id, challenge_id)
+                user_id INTEGER PRIMARY KEY,
+                total_points INTEGER DEFAULT 0
             )
         ''')
 
@@ -56,22 +54,19 @@ class DiscordDatabase:
         self.connect()
 
         # Check if the user exists in the user_points table
-        self.cursor.execute('SELECT COUNT(*) FROM user_points WHERE user_id = ?', (user_id,))
-        user_exists = self.cursor.fetchone()[0] > 0
+        self.cursor.execute('SELECT total_points FROM user_points WHERE user_id = ?', (user_id,))
+        user_points = self.cursor.fetchone()
 
-        # If the user doesn't exist, create a new user entry
-        if not user_exists:
-            self.cursor.execute('INSERT INTO user_points (user_id) VALUES (?)', (user_id,))
-            print(f"User with ID {user_id} created in user_points table.")
-
-        # Retrieve user points from the user_points table
-        self.cursor.execute('SELECT challenge_id FROM user_points WHERE user_id = ?', (user_id,))
-        user_points = self.cursor.fetchall()
+        # If the user doesn't exist, create a new user entry with points initialized to 0
+        if not user_points:
+            self.cursor.execute('INSERT INTO user_points (user_id, total_points) VALUES (?, ?)', (user_id, 0))
+            print(f"User with ID {user_id} created in user_points table with 0 points.")
+            user_points = (0,)  # Set user_points to (0,) to avoid NoneType issues
 
         # Close the connection
         self.close()
 
-        return user_points
+        return user_points[0]  # Return total_points as a single value
 
     def add_user_points(self, user_id, challenge_id):
         self.connect()
@@ -87,9 +82,8 @@ class DiscordDatabase:
 
         # Retrieve top users based on points
         self.cursor.execute('''
-            SELECT user_id, SUM(points) as total_points
-            FROM user_points JOIN challenges ON user_points.challenge_id = challenges.id
-            GROUP BY user_id
+            SELECT user_id, total_points
+            FROM user_points
             ORDER BY total_points DESC
             LIMIT ?
         ''', (limit,))
@@ -140,6 +134,11 @@ class DiscordDatabase:
                 self.cursor.execute('UPDATE completed_challenges SET completion_count = completion_count + 1 WHERE user_id = ? AND challenge_id = ?', (user_id, challenge_id))
             else:
                 self.cursor.execute('INSERT INTO completed_challenges (user_id, challenge_id) VALUES (?, ?)', (user_id, challenge_id))
+
+            # Update user points based on the challenge points
+            self.cursor.execute('SELECT points FROM challenges WHERE id = ?', (challenge_id,))
+            challenge_points = self.cursor.fetchone()[0]
+            self.cursor.execute('UPDATE user_points SET total_points = total_points + ? WHERE user_id = ?', (challenge_points, user_id))
 
             print(f"Challenge with ID {challenge_id} completed by user {user_id}.")
         except Exception as e:
