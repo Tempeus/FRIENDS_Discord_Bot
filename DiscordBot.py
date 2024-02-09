@@ -15,7 +15,6 @@ intents.messages = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 db = DiscordDB.DiscordDatabase()
 
-
 @bot.event
 async def on_ready():
     db.create_tables()
@@ -24,14 +23,13 @@ async def on_ready():
 async def check_points(ctx):
     # Check and display user points
     user_id = str(ctx.author.id)
-    points = user_points.get(user_id, 0)
+    points = db.get_user_points(user_id)
     await ctx.send(f"{ctx.author.mention}, you have {points} points.")
 
 @bot.command(name='leaderboard')
 async def leaderboard(ctx):
     # Display the top 10 players on the leaderboard
-    sorted_users = sorted(user_points.items(), key=lambda x: x[1], reverse=True)[:10]
-
+    sorted_users = db.get_top_users()
     leaderboard_message = "Leaderboard:\n"
     for idx, (user_id, points) in enumerate(sorted_users, start=1):
         member = ctx.guild.get_member(int(user_id))

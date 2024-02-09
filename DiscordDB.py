@@ -82,6 +82,25 @@ class DiscordDatabase:
         # Close the connection
         self.close()
 
+    def get_top_users(self, limit=10):
+        self.connect()
+
+        # Retrieve top users based on points
+        self.cursor.execute('''
+            SELECT user_id, SUM(points) as total_points
+            FROM user_points JOIN challenges ON user_points.challenge_id = challenges.id
+            GROUP BY user_id
+            ORDER BY total_points DESC
+            LIMIT ?
+        ''', (limit,))
+
+        top_users = self.cursor.fetchall()
+
+        # Close the connection
+        self.close()
+
+        return top_users
+
     def add_challenge(self, name, points, unique_challenge=True):
         self.connect()
         try:
