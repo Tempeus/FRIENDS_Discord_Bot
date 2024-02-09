@@ -7,7 +7,6 @@ import DiscordDB
 # environment variables
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
-OPENAI_KEY = os.getenv('OPENAI_KEY')
 
 intents = discord.Intents.default()
 intents.members = True  # Disable typing events, if needed
