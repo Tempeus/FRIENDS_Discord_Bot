@@ -113,14 +113,42 @@ class DiscordDatabase:
         challenges = self.cursor.fetchall()
         self.close()
         return challenges
-
-    def get_completed_challenges(self, user_id):
+    
+    def get_completed_challenges(self):
         self.connect()
-        # Retrieve completed challenges for a specific user
-        self.cursor.execute('SELECT challenge_id FROM completed_challenges WHERE user_id = ?', (user_id,))
-        completed_challenges = self.cursor.fetchall()
+
+        # Retrieve completed challenges with user IDs, challenge IDs, and completion counts
+        self.cursor.execute('''
+            SELECT user_id, challenge_id, completion_count
+            FROM completed_challenges
+        ''')
+
+        completed_challenges_list = self.cursor.fetchall()
+
+        # Close the connection
         self.close()
-        return completed_challenges
+
+        return completed_challenges_list
+    
+    def get_challenge_info(self, challenge_id):
+        self.connect()
+
+        # Retrieve challenge information based on the challenge ID
+        self.cursor.execute('''
+            SELECT name, points, unique_challenge
+            FROM challenges
+            WHERE id = ?
+        ''', (challenge_id,))
+
+        challenge_info = self.cursor.fetchone()
+
+        # Close the connection
+        self.close()
+
+        if challenge_info:
+            return {'name': challenge_info[0], 'points': challenge_info[1], 'unique_challenge': bool(challenge_info[2])}
+        else:
+            return None
 
     def complete_challenge(self, user_id, challenge_id):
         self.connect()

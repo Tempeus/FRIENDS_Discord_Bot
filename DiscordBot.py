@@ -66,10 +66,34 @@ async def list_challenges(ctx):
         if challenges_list:
             challenge_str = "Challenges:\n"
             for challenge in challenges_list:
-                challenge_str += f"ID: {challenge[0]}, Name: {challenge[1]}, Points: {challenge[2]}, Unique: {challenge[3]}\n"
+                challenge_str += f"ID: {challenge[0]}, Name: {challenge[1]}, Points: {challenge[2]}\n"
             await ctx.send(challenge_str)
         else:
             await ctx.send("No challenges found in the database.")
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
+
+@bot.command(name='completed_challenges')
+async def completed_challenges(ctx):
+    try:
+        # Retrieve completed challenges from the database
+        completed_challenges_list = db.get_completed_challenges()
+
+        # Display completed challenges in a formatted way
+        if completed_challenges_list:
+            completed_str = "Completed Challenges:\n"
+            for completion in completed_challenges_list:
+                user_id, challenge_id, completion_count = completion
+                challenge_info = db.get_challenge_info(challenge_id)  # Assuming there is a method to get challenge info by ID
+                if challenge_info:
+                    completed_str += (f"Challenge: {challenge_info['name']}, "
+                                      f"User: <@{user_id}>, "
+                                      f"Completion Count: {completion_count}\n")
+                else:
+                    completed_str += f"Challenge ID {challenge_id}, User: <@{user_id}>, Completion Count: {completion_count}\n"
+            await ctx.send(completed_str)
+        else:
+            await ctx.send("No completed challenges found in the database.")
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
