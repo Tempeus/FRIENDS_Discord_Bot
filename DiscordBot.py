@@ -56,7 +56,7 @@ async def add_challenge(ctx, name, points, unique_challenge=True):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-@bot.command(name='list_challenges')
+@bot.command(name='list')
 async def list_challenges(ctx):
     try:
         # Retrieve challenges from the database
@@ -74,7 +74,7 @@ async def list_challenges(ctx):
         await ctx.send(f"An error occurred: {e}")
 
 # Command to complete a challenge for a user
-@bot.command(name='complete_challenge')
+@bot.command(name='complete')
 async def complete_challenge(ctx, user_mention, challenge_id):
     try:
         # Check if the command user is the server owner
