@@ -48,6 +48,30 @@ class DiscordDatabase:
             )
         ''')
 
+                # Create betting_events table
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS betting_events (
+                guild_id INTEGER,
+                event_id INTEGER,
+                team1 TEXT,
+                team2 TEXT,
+                PRIMARY KEY (guild_id, event_id)
+            )
+        ''')
+
+        # Create bets table
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bets (
+                guild_id INTEGER,
+                event_id INTEGER,
+                user_id INTEGER,
+                team TEXT,
+                amount INTEGER,
+                FOREIGN KEY (guild_id, event_id) REFERENCES betting_events(guild_id, event_id),
+                PRIMARY KEY (guild_id, event_id, user_id)
+            )
+        ''')
+
         self.close()
 
     def get_user_points(self, user_id):
@@ -75,6 +99,24 @@ class DiscordDatabase:
         self.cursor.execute('INSERT INTO user_points (user_id, challenge_id) VALUES (?, ?)', (user_id, challenge_id))
 
         # Close the connection
+        self.close()
+
+    def update_user_points(self, user_id, points_change):
+        self.connect()
+
+        # Retrieve the current points of the user
+        current_points = self.get_user_points(user_id)
+
+        # Calculate the new points after the change
+        new_points = max(0, current_points + points_change)  # Ensure the user cannot have negative points
+
+        # Update the user's points in the user_points table
+        self.cursor.execute('''
+            REPLACE INTO user_points (user_id, points)
+            VALUES (?, ?)
+        ''', (user_id, new_points))
+
+        # Commit the changes and close the connection
         self.close()
 
     def get_top_users(self, limit=10):
@@ -173,3 +215,27 @@ class DiscordDatabase:
             print(f"Error completing challenge: {e}")
         finally:
             self.close()
+
+    # BETTING AND EVENTS #
+    
+    def create_event(self, guild_id, event_id, team1, team2):
+        self.connect()
+
+        # Insert a new betting event into the betting_events table
+        self.cursor.execute('''
+            INSERT INTO betting_events (guild_id, event_id, team1, team2)
+            VALUES (?, ?, ?, ?)
+        ''', (guild_id, event_id, team1, team2))
+
+        self.close()
+
+    def place_bet(self, guild_id, event_id, user_id, team, amount):
+        self.connect()
+
+        # Insert a new bet into the bets table
+        self.cursor.execute('''
+            INSERT INTO bets (guild_id, event_id, user_id, team, amount)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (guild_id, event_id, user_id, team, amount))
+
+        self.close()
