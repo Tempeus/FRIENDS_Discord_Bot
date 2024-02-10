@@ -187,7 +187,6 @@ async def end_event(ctx, event_id, winner_team):
         user_id = ctx.author.id
         guild_id = ctx.guild.id
         event_id = int(event_id)
-        winner_team = winner_team.lower()  # Convert to lowercase for case-insensitive comparison
 
         # Check if the event is still active in the database
         if not db.is_event_active(guild_id, event_id):
@@ -201,12 +200,13 @@ async def end_event(ctx, event_id, winner_team):
 
         # Set the winner and calculate payouts
         winning_odds, winning_bets = db.calculate_payouts(guild_id, event_id, winner_team)
+        print(winning_bets)
 
         # Update user points in the database
         for user_id, amount in winning_bets.items():
             print(str(user_id) + "bet this much: " + str(amount))
             payout = int(amount * winning_odds)
-            db.update_user_points(user_id, payout)
+            db.update_user_points(user_id, payout + amount)
             await ctx.send(f"{ctx.guild.get_member(user_id).mention} You won {payout} points! Congratulations!")
 
         # Mark the event as ended in the database

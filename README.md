@@ -52,3 +52,6 @@ Loading points from user
 Saving points to user
 Loading challenges
 Submitting challenges
+
+
+# TODO: HELP METHOD
