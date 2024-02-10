@@ -32,7 +32,7 @@ class DiscordDatabase:
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_points (
                 user_id INTEGER PRIMARY KEY,
-                total_points INTEGER DEFAULT 0
+                points INTEGER DEFAULT 0
             )
         ''')
 
@@ -48,49 +48,52 @@ class DiscordDatabase:
             )
         ''')
 
-                # Create betting_events table
+        # Create the betting_events table
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS betting_events (
                 guild_id INTEGER,
-                event_id INTEGER,
+                event_id INTEGER PRIMARY KEY,
                 team1 TEXT,
                 team2 TEXT,
-                PRIMARY KEY (guild_id, event_id)
+                odds REAL,
+                winner TEXT,
+                FOREIGN KEY (guild_id) REFERENCES user_points (user_id)
             )
         ''')
 
-        # Create bets table
+        # Create the bets table (formerly user_bets)
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS bets (
                 guild_id INTEGER,
                 event_id INTEGER,
                 user_id INTEGER,
-                team TEXT,
+                chosen_team TEXT,
                 amount INTEGER,
-                FOREIGN KEY (guild_id, event_id) REFERENCES betting_events(guild_id, event_id),
-                PRIMARY KEY (guild_id, event_id, user_id)
+                PRIMARY KEY (guild_id, event_id, user_id),
+                FOREIGN KEY (guild_id, event_id) REFERENCES betting_events (guild_id, event_id),
+                FOREIGN KEY (user_id) REFERENCES user_points (user_id)
             )
         ''')
-
+        
         self.close()
 
     def get_user_points(self, user_id):
         self.connect()
 
         # Check if the user exists in the user_points table
-        self.cursor.execute('SELECT total_points FROM user_points WHERE user_id = ?', (user_id,))
+        self.cursor.execute('SELECT points FROM user_points WHERE user_id = ?', (user_id,))
         user_points = self.cursor.fetchone()
 
         # If the user doesn't exist, create a new user entry with points initialized to 0
         if not user_points:
-            self.cursor.execute('INSERT INTO user_points (user_id, total_points) VALUES (?, ?)', (user_id, 0))
+            self.cursor.execute('INSERT INTO user_points (user_id, points) VALUES (?, ?)', (user_id, 0))
             print(f"User with ID {user_id} created in user_points table with 0 points.")
             user_points = (0,)  # Set user_points to (0,) to avoid NoneType issues
 
         # Close the connection
         self.close()
 
-        return user_points[0]  # Return total_points as a single value
+        return user_points[0]  # Return points as a single value
 
     def add_user_points(self, user_id, challenge_id):
         self.connect()
@@ -102,11 +105,10 @@ class DiscordDatabase:
         self.close()
 
     def update_user_points(self, user_id, points_change):
-        self.connect()
-
         # Retrieve the current points of the user
         current_points = self.get_user_points(user_id)
 
+        self.connect()
         # Calculate the new points after the change
         new_points = max(0, current_points + points_change)  # Ensure the user cannot have negative points
 
@@ -124,9 +126,9 @@ class DiscordDatabase:
 
         # Retrieve top users based on points
         self.cursor.execute('''
-            SELECT user_id, total_points
+            SELECT user_id, points
             FROM user_points
-            ORDER BY total_points DESC
+            ORDER BY points DESC
             LIMIT ?
         ''', (limit,))
 
@@ -208,7 +210,7 @@ class DiscordDatabase:
             # Update user points based on the challenge points
             self.cursor.execute('SELECT points FROM challenges WHERE id = ?', (challenge_id,))
             challenge_points = self.cursor.fetchone()[0]
-            self.cursor.execute('UPDATE user_points SET total_points = total_points + ? WHERE user_id = ?', (challenge_points, user_id))
+            self.cursor.execute('UPDATE user_points SET points = points + ? WHERE user_id = ?', (challenge_points, user_id))
 
             print(f"Challenge with ID {challenge_id} completed by user {user_id}.")
         except Exception as e:
@@ -218,15 +220,16 @@ class DiscordDatabase:
 
     # BETTING AND EVENTS #
     
-    def create_event(self, guild_id, event_id, team1, team2):
+    def create_event(self, guild_id, event_id, team1, team2, odds):
         self.connect()
 
-        # Insert a new betting event into the betting_events table
+        # Insert the new event into the betting_events table
         self.cursor.execute('''
-            INSERT INTO betting_events (guild_id, event_id, team1, team2)
-            VALUES (?, ?, ?, ?)
-        ''', (guild_id, event_id, team1, team2))
+            INSERT INTO betting_events (guild_id, event_id, team1, team2, odds, winner)
+            VALUES (?, ?, ?, ?, ?, NULL)
+        ''', (guild_id, event_id, team1, team2, odds))
 
+        # Commit the changes and close the connection
         self.close()
 
     def place_bet(self, guild_id, event_id, user_id, team, amount):
@@ -234,8 +237,116 @@ class DiscordDatabase:
 
         # Insert a new bet into the bets table
         self.cursor.execute('''
-            INSERT INTO bets (guild_id, event_id, user_id, team, amount)
+            INSERT INTO bets (guild_id, event_id, user_id, chosen_team, amount)
             VALUES (?, ?, ?, ?, ?)
         ''', (guild_id, event_id, user_id, team, amount))
 
+        self.close()
+
+    def is_event_id_unique(self, guild_id, event_id):
+        self.connect()
+
+        # Check if the event ID is unique for the guild
+        self.cursor.execute('''
+            SELECT 1
+            FROM betting_events
+            WHERE guild_id = ? AND event_id = ?
+        ''', (guild_id, event_id))
+
+        is_unique = not bool(self.cursor.fetchone())
+
+        # Close the connection
+        self.close()
+
+        return is_unique
+
+    def is_event_active(self, guild_id, event_id):
+        self.connect()
+
+        # Check if the event is still active based on the betting_events table
+        self.cursor.execute('''
+            SELECT 1
+            FROM betting_events
+            WHERE guild_id = ? AND event_id = ? AND winner IS NULL
+        ''', (guild_id, event_id))
+
+        is_active = bool(self.cursor.fetchone())
+
+        # Close the connection
+        self.close()
+
+        return is_active
+
+    def is_valid_team(self, guild_id, event_id, chosen_team):
+        self.connect()
+
+        # Check if the chosen team is valid for the given event
+        self.cursor.execute('''
+            SELECT 1
+            FROM betting_events
+            WHERE guild_id = ? AND event_id = ? AND (team1 = ? OR team2 = ?)
+        ''', (guild_id, event_id, chosen_team, chosen_team))
+
+        is_valid = bool(self.cursor.fetchone())
+
+        # Close the connection
+        self.close()
+
+        return is_valid
+    
+    # Inside the ChallengesDatabase class
+    def is_event_ended(self, guild_id, event_id):
+        self.connect()
+
+        # Check if the event is already marked as ended in the betting_events table
+        self.cursor.execute('''
+            SELECT 1
+            FROM betting_events
+            WHERE guild_id = ? AND event_id = ? AND winner IS NOT NULL
+        ''', (guild_id, event_id))
+
+        is_ended = bool(self.cursor.fetchone())
+
+        # Close the connection
+        self.close()
+
+        return is_ended
+
+    def calculate_payouts(self, guild_id, event_id, winner_team):
+        self.connect()
+
+        # Retrieve winning odds from the betting_events table
+        self.cursor.execute('''
+            SELECT odds
+            FROM betting_events
+            WHERE guild_id = ? AND event_id = ?
+        ''', (guild_id, event_id))
+
+        winning_odds = self.cursor.fetchone()[0] if winner_team == 'team1' else 1 / self.cursor.fetchone()[0]
+
+        # Get bets for the winning team from the bets table
+        self.cursor.execute('''
+            SELECT user_id, amount
+            FROM bets
+            WHERE guild_id = ? AND event_id = ? AND chosen_team = ?
+        ''', (guild_id, event_id, winner_team))
+
+        winning_bets = {user_id: amount for user_id, amount in self.cursor.fetchall()}
+
+        # Close the connection
+        self.close()
+
+        return winning_odds, winning_bets
+
+    def mark_event_as_ended(self, guild_id, event_id):
+        self.connect()
+
+        # Update the winner column in the betting_events table
+        self.cursor.execute('''
+            UPDATE betting_events
+            SET winner = 'team1'  -- Replace with the actual winner or a flag indicating the event has ended
+            WHERE guild_id = ? AND event_id = ?
+        ''', (guild_id, event_id))
+
+        # Commit the changes and close the connection
         self.close()

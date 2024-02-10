@@ -17,10 +17,6 @@ intents.message_content = True    # Enable message content updates (required for
 bot = commands.Bot(command_prefix='!', intents=intents)
 db = DiscordDB.DiscordDatabase()
 
-# Define a dictionary to store active betting events
-# WE WILL STORE THIS IN DB
-active_betting_events = {}
-
 @bot.event
 async def on_ready():
     db.create_tables()
@@ -129,29 +125,21 @@ async def complete_challenge(ctx, user_mention, challenge_id):
 # ================================= Betting ==================================== #
 # Command to create a new betting event
 @bot.command(name='create_event')
-async def create_event(ctx, team1, team2, odds):
+async def create_event(ctx, event_id, team1, team2, odds):
     try:
         guild_id = ctx.guild.id
-
-        # Convert odds to a float (e.g., 2.5)
+        event_id = int(event_id)
         odds = float(odds)
 
-        # Initialize a new betting event
-        event_id = ctx.message.id  # Using message ID as a unique event ID for simplicity
-        db.create_event(guild_id, event_id, team1, team2, odds)
-
-        # Add the event to the in-memory dictionary
-        if guild_id not in active_betting_events:
-            active_betting_events[guild_id] = []
-
-        active_betting_events[guild_id].append({'event_id': event_id, 'team1': team1, 'team2': team2, 'odds': odds, 'bets': {}})
-
-        await ctx.send(f"Betting event created! Event ID: {event_id}\n"
-                       f"Teams: {team1} vs {team2}\n"
-                       f"Odds: {odds}\n"
-                       f"Place your bets using !bet {event_id} <team> <amount>")
+        # Check if the event ID is unique for the guild
+        if db.is_event_id_unique(guild_id, event_id):
+            # Create the event in the database
+            db.create_event(guild_id, event_id, team1, team2, odds)
+            await ctx.send(f"Event {event_id} created successfully!")
+        else:
+            await ctx.send("Event ID already exists for this guild. Choose a unique event ID.")
     except ValueError:
-        await ctx.send("Invalid odds. Please provide a valid floating-point number.")
+        await ctx.send("Invalid event ID or odds. Please provide valid integers or floats.")
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
@@ -164,13 +152,13 @@ async def bet(ctx, event_id, chosen_team, amount):
         event_id = int(event_id)
         amount = int(amount)
 
-        # Check if the guild has any active events
-        if guild_id not in active_betting_events or not any(event['event_id'] == event_id for event in active_betting_events[guild_id]):
+        # Check if the event is still active in the database
+        if not db.is_event_active(guild_id, event_id):
             await ctx.send("Invalid event ID. Make sure the event is still active.")
             return
 
         # Check if the chosen team is valid
-        if chosen_team not in [event['team1'] for event in active_betting_events[guild_id]] + [event['team2'] for event in active_betting_events[guild_id]]:
+        if not db.is_valid_team(guild_id, event_id, chosen_team):
             await ctx.send("Invalid team. Choose a team from the active events.")
             return
 
@@ -180,16 +168,11 @@ async def bet(ctx, event_id, chosen_team, amount):
             await ctx.send("You don't have enough points to place that bet.")
             return
 
-        # Record the bet in the in-memory dictionary and the database
-        for event in active_betting_events[guild_id]:
-            if event['event_id'] == event_id:
-                event['bets'][user_id] = {'team': chosen_team, 'amount': amount}
-                break
-
-        db.place_bet(guild_id, event_id, user_id, chosen_team, amount)
-        
         # Deduct points from the user's wallet
         db.update_user_points(user_id, -amount)
+
+        # Record the bet in the database
+        db.place_bet(guild_id, event_id, user_id, chosen_team, amount)
 
         await ctx.send(f"Bet placed! You bet {amount} points on {chosen_team}. Good luck!")
     except ValueError:
@@ -201,35 +184,33 @@ async def bet(ctx, event_id, chosen_team, amount):
 @bot.command(name='end_event')
 async def end_event(ctx, event_id, winner_team):
     try:
+        user_id = ctx.author.id
         guild_id = ctx.guild.id
         event_id = int(event_id)
         winner_team = winner_team.lower()  # Convert to lowercase for case-insensitive comparison
 
-        # Check if the guild has any active events
-        if guild_id not in active_betting_events or not any(event['event_id'] == event_id for event in active_betting_events[guild_id]):
+        # Check if the event is still active in the database
+        if not db.is_event_active(guild_id, event_id):
             await ctx.send("Invalid event ID. Make sure the event is still active.")
             return
 
         # Check if the event has already been ended
-        if 'winner' in active_betting_events[guild_id]:
+        if db.is_event_ended(guild_id, event_id):
             await ctx.send("This event has already been ended.")
             return
 
         # Set the winner and calculate payouts
-        for event in active_betting_events[guild_id]:
-            if event['event_id'] == event_id:
-                event['winner'] = winner_team
-                winning_odds = event['odds'] if winner_team == event['team1'] else 1 / event['odds']
-                break
+        winning_odds, winning_bets = db.calculate_payouts(guild_id, event_id, winner_team)
 
-        # Get bets for the winning team
-        winning_bets = {user_id: bet['amount'] for user_id, bet in event['bets'].items() if bet['team'].lower() == winner_team}
-
-        # Calculate payouts and update user points in the database
+        # Update user points in the database
         for user_id, amount in winning_bets.items():
+            print(str(user_id) + "bet this much: " + str(amount))
             payout = int(amount * winning_odds)
             db.update_user_points(user_id, payout)
             await ctx.send(f"{ctx.guild.get_member(user_id).mention} You won {payout} points! Congratulations!")
+
+        # Mark the event as ended in the database
+        db.mark_event_as_ended(guild_id, event_id)
 
         await ctx.send(f"The winner is {winner_team}! Payouts have been processed.")
     except ValueError:
@@ -262,6 +243,20 @@ async def fifty_fifty(ctx, amount):
             await ctx.send(f"Oops! You lost {amount} points. Your total points: {user_points - amount}")
     except ValueError:
         await ctx.send("Invalid bet amount. Please provide a positive integer.")
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
+
+# DEBUGGING
+@bot.command(name="add")
+async def add(ctx, amount):
+    try:
+        user_id = ctx.author.id
+        amount = int(amount)
+
+        db.update_user_points(user_id, amount)
+        await ctx.send("sent " + str(amount))
+    except ValueError:
+        await ctx.send("Invalid user ID or points. Please provide valid integers.")
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
