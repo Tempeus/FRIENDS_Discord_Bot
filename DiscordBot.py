@@ -56,7 +56,7 @@ async def add_challenge(ctx, name, points, unique_challenge=True):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-@bot.command(name='list')
+@bot.command(name='challenges')
 async def list_challenges(ctx):
     try:
         # Retrieve challenges from the database
@@ -73,7 +73,7 @@ async def list_challenges(ctx):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-@bot.command(name='completed_list')
+@bot.command(name='completed')
 async def completed_challenges(ctx):
     try:
         # Retrieve completed challenges from the database
@@ -214,7 +214,7 @@ async def end_event(ctx, event_id, winner_team):
         await ctx.send(f"An error occurred: {e}")
 
 # Command to display a list of events with user bets
-@bot.command(name='list_events')
+@bot.command(name='events')
 async def list_events(ctx):
     try:
         guild_id = ctx.guild.id
