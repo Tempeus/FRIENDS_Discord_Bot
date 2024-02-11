@@ -125,21 +125,16 @@ async def complete_challenge(ctx, user_mention, challenge_id):
 # ================================= Betting ==================================== #
 # Command to create a new betting event
 @bot.command(name='create_event')
-async def create_event(ctx, event_id, team1, team2, odds):
+async def create_event(ctx, team1, team2, odds):
     try:
         guild_id = ctx.guild.id
-        event_id = int(event_id)
         odds = float(odds)
 
-        # Check if the event ID is unique for the guild
-        if db.is_event_id_unique(guild_id, event_id):
-            # Create the event in the database
-            db.create_event(guild_id, event_id, team1, team2, odds)
-            await ctx.send(f"Event {event_id} created successfully!")
-        else:
-            await ctx.send("Event ID already exists for this guild. Choose a unique event ID.")
+        # Create the event in the database
+        event_id = db.create_event(guild_id, team1, team2, odds)
+        await ctx.send(f"Event created successfully! Event ID: {event_id}")
     except ValueError:
-        await ctx.send("Invalid event ID or odds. Please provide valid integers or floats.")
+        await ctx.send("Invalid odds. Please provide a valid float.")
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
@@ -218,6 +213,42 @@ async def end_event(ctx, event_id, winner_team):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
+# Command to display a list of events with user bets
+@bot.command(name='list_events')
+async def list_events(ctx):
+    try:
+        guild_id = ctx.guild.id
+
+        # Retrieve the list of active events from the database
+        active_events = db.get_active_events(guild_id)
+
+        # Check if there are any active events
+        if not active_events:
+            await ctx.send("No active events available.")
+            return
+
+        # Format and send the list of active events in a Discord message
+        event_list_message = "List of Active Events:\n"
+        for event in active_events:
+            event_id, team1, team2, odds = event
+            event_list_message += f"Event ID: {event_id}, Teams: {team1} vs {team2}, Odds: {odds}\n"
+
+            # Retrieve user bets for each team from the database
+            team1_bets = db.get_bets_for_team(guild_id, event_id, team1)
+            team2_bets = db.get_bets_for_team(guild_id, event_id, team2)
+
+            # Convert user IDs to usernames
+            team1_bets_with_usernames = [(ctx.guild.get_member(user_id).name, amount) for user_id, amount in team1_bets]
+            team2_bets_with_usernames = [(ctx.guild.get_member(user_id).name, amount) for user_id, amount in team2_bets]
+
+            # Append user bets information to the message
+            event_list_message += f"\tBets on {team1}: {', '.join([f'{user} ({amount} points)' for user, amount in team1_bets_with_usernames])}\n"
+            event_list_message += f"\tBets on {team2}: {', '.join([f'{user} ({amount} points)' for user, amount in team2_bets_with_usernames])}\n"
+
+        await ctx.send(event_list_message)
+    except Exception as e:
+        await ctx.send(f"An error occurred: {e}")
+
 # ================================= Gambling =================================== #
 @bot.command(name='50/50')
 async def fifty_fifty(ctx, amount):
@@ -261,3 +292,6 @@ async def add(ctx, amount):
         await ctx.send(f"An error occurred: {e}")
 
 bot.run(TOKEN)
+
+
+#TODO: HELP METHOD

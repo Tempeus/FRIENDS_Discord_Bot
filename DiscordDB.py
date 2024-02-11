@@ -52,7 +52,7 @@ class DiscordDatabase:
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS betting_events (
                 guild_id INTEGER,
-                event_id INTEGER PRIMARY KEY,
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 team1 TEXT,
                 team2 TEXT,
                 odds REAL,
@@ -86,9 +86,9 @@ class DiscordDatabase:
 
         # If the user doesn't exist, create a new user entry with points initialized to 0
         if not user_points:
-            self.cursor.execute('INSERT INTO user_points (user_id, points) VALUES (?, ?)', (user_id, 0))
-            print(f"User with ID {user_id} created in user_points table with 0 points.")
-            user_points = (0,)  # Set user_points to (0,) to avoid NoneType issues
+            self.cursor.execute('INSERT INTO user_points (user_id, points) VALUES (?, ?)', (user_id, 100))
+            print(f"User with ID {user_id} created in user_points table with 100 points.")
+            user_points = (100,)  # Set user_points to (0,) to avoid NoneType issues
 
         # Close the connection
         self.close()
@@ -220,17 +220,22 @@ class DiscordDatabase:
 
     # BETTING AND EVENTS #
     
-    def create_event(self, guild_id, event_id, team1, team2, odds):
+    def create_event(self, guild_id, team1, team2, odds):
         self.connect()
 
         # Insert the new event into the betting_events table
         self.cursor.execute('''
-            INSERT INTO betting_events (guild_id, event_id, team1, team2, odds, winner)
-            VALUES (?, ?, ?, ?, ?, NULL)
-        ''', (guild_id, event_id, team1, team2, odds))
+            INSERT INTO betting_events (guild_id, team1, team2, odds, winner)
+            VALUES (?, ?, ?, ?, NULL)
+        ''', (guild_id, team1, team2, odds))
+
+        # Get the last inserted row ID, which is the auto-incremented event_id
+        event_id = self.cursor.lastrowid
 
         # Commit the changes and close the connection
         self.close()
+
+        return event_id
 
     def place_bet(self, guild_id, event_id, user_id, team, amount):
         self.connect()
@@ -276,6 +281,23 @@ class DiscordDatabase:
         self.close()
 
         return is_active
+    
+    def get_active_events(self, guild_id):
+        self.connect()
+
+        # Retrieve active events from the betting_events table
+        self.cursor.execute('''
+            SELECT event_id, team1, team2, odds
+            FROM betting_events
+            WHERE guild_id = ? AND winner IS NULL
+        ''', (guild_id,))
+
+        active_events = self.cursor.fetchall()
+
+        # Close the connection
+        self.close()
+
+        return active_events
 
     def is_valid_team(self, guild_id, event_id, chosen_team):
         self.connect()
@@ -350,3 +372,37 @@ class DiscordDatabase:
 
         # Commit the changes and close the connection
         self.close()
+
+    def get_bets_for_team(self, guild_id, event_id, chosen_team):
+        self.connect()
+
+        # Retrieve user bets for the chosen team from the bets table
+        self.cursor.execute('''
+            SELECT user_id, amount
+            FROM bets
+            WHERE guild_id = ? AND event_id = ? AND chosen_team = ?
+        ''', (guild_id, event_id, chosen_team))
+
+        team_bets = self.cursor.fetchall()
+
+        # Close the connection
+        self.close()
+
+        return team_bets
+    
+    def get_all_events(self, guild_id):
+        self.connect()
+
+        # Retrieve all events from the betting_events table
+        self.cursor.execute('''
+            SELECT event_id, team1, team2, odds
+            FROM betting_events
+            WHERE guild_id = ?
+        ''', (guild_id,))
+
+        events = self.cursor.fetchall()
+
+        # Close the connection
+        self.close()
+
+        return events
