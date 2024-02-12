@@ -15,7 +15,25 @@ intents.members = True  # Disable typing events, if needed
 intents.presences = True  # Disable presence events, if needed
 intents.message_content = True    # Enable message content updates (required for commands)
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+class CustomHelpCommand(commands.DefaultHelpCommand):
+    async def send_bot_help(self, mapping):
+        embed = discord.Embed(title="Friend Bot's Commands", color=discord.Color.blue())
+
+        for cog, commands in mapping.items():
+            if cog:
+                embed.add_field(name=cog.qualified_name, value=" ".join(f"`{command.name}\n`" for command in commands), inline=False)
+            else:
+                embed.add_field(name="Commands", value=" ".join(f"`{command.name}\n`" for command in commands), inline=False)
+
+        channel = self.get_destination()
+        await channel.send(embed=embed)
+
+    async def send_command_help(self, command):
+        embed = discord.Embed(title=f"Help for `{command.name}`", description=command.help, color=discord.Color.green())
+        channel = self.get_destination()
+        await channel.send(embed=embed)
+
+bot = commands.Bot(command_prefix='!', help_command=CustomHelpCommand(), intents=intents)
 db = DiscordDB.DiscordDatabase()
 
 @bot.event
@@ -23,14 +41,14 @@ async def on_ready():
     db.create_tables()
 
 # ================================= Points  ==================================== #
-@bot.command(name='points')
+@bot.command(name='points', help="!points \nShow your current points")
 async def check_points(ctx):
     # Check and display user points
     user_id = str(ctx.author.id)
     points = db.get_user_points(user_id)
     await ctx.send(f"{ctx.author.mention}, you have {points} points.")
 
-@bot.command(name='leaderboard')
+@bot.command(name='leaderboard', help="!leaderboard \nShow the top 20 players with the most points")
 async def leaderboard(ctx):
     # Display the top 10 players on the leaderboard
     sorted_users = db.get_top_users()
@@ -43,7 +61,7 @@ async def leaderboard(ctx):
     await ctx.send(leaderboard_message)
 
 # ================================= Challenges ==================================== #
-@bot.command(name='create_challenge')
+@bot.command(name='create_challenge', help="!create_challenge {name} {points} {unique?} \nCreates a challenge ")
 async def add_challenge(ctx, name, points, unique_challenge=True):
     try:
         points = int(points)
@@ -59,7 +77,7 @@ async def add_challenge(ctx, name, points, unique_challenge=True):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-@bot.command(name='challenges')
+@bot.command(name='challenges', help="!challenges \nLists all the challenges")
 async def list_challenges(ctx):
     try:
         # Retrieve challenges from the database
@@ -76,7 +94,7 @@ async def list_challenges(ctx):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-@bot.command(name='completed')
+@bot.command(name='completed', help="!completed \nGet a list of completed challenges and who completed them")
 async def completed_challenges(ctx):
     try:
         # Retrieve completed challenges from the database
@@ -101,7 +119,7 @@ async def completed_challenges(ctx):
         await ctx.send(f"An error occurred: {e}")
 
 # Command to complete a challenge for a user
-@bot.command(name='complete')
+@bot.command(name='complete', help="!complete {user_mention} {challenge_ID} \nCompletes the challenge and reward the mentioned user points")
 async def complete_challenge(ctx, user_mention, challenge_id):
     try:
         # Check if the command user is the server owner
@@ -127,7 +145,7 @@ async def complete_challenge(ctx, user_mention, challenge_id):
 
 # ================================= Betting ==================================== #
 # Command to create a new betting event
-@bot.command(name='create_event')
+@bot.command(name='create_event', help="!create_event {team1} {team2} {odds} {duration_hours} \nCreates a betting event of two teams with the odds and the betting period starting now")
 async def create_event(ctx, team1, team2, odds, duration_hours):
     try:
         guild_id = ctx.guild.id
@@ -150,7 +168,7 @@ async def create_event(ctx, team1, team2, odds, duration_hours):
         await ctx.send(f"An error occurred: {e}")
 
 # Command to place a bet
-@bot.command(name='bet')
+@bot.command(name='bet', help="!bet {eventID} {chosen_team} {amount} \nBet on a team with your money and pray that you win")
 async def bet(ctx, event_id, chosen_team, amount):
     try:        
         user_id = ctx.author.id
@@ -159,29 +177,35 @@ async def bet(ctx, event_id, chosen_team, amount):
         amount = int(amount)
 
         # Check if the event is still active in the database
+        print("Checking if event is still active")
         if not db.is_event_active(guild_id, event_id):
             await ctx.send("Invalid event ID. Make sure the event is still active.")
             return
 
         # Check if the chosen team is valid
+        print("check if the team is valid")
         if not db.is_valid_team(guild_id, event_id, chosen_team):
             await ctx.send("Invalid team. Choose a team from the active events.")
             return
 
         # Check if the user has enough points to place the bet
+        print('Getting user points')
         user_points = db.get_user_points(user_id)
         if amount > user_points:
             await ctx.send("You don't have enough points to place that bet.")
 
         # Check if the betting period has ended
+        print("Check if betting period is over")
         if datetime.datetime.now() > db.get_betting_end_time(guild_id, event_id):
             await ctx.send("Betting period has ended.")
             return
 
         # Place the bet in the database
+        print("placing bet")
         db.place_bet(guild_id, event_id, user_id, chosen_team, amount)
 
         # Deduct points from the user's wallet
+        print("updating user wallet")
         db.update_user_points(user_id, -amount)
 
         await ctx.send(f"Bet placed! You bet {amount} points on {chosen_team}. Good luck!")
@@ -190,8 +214,8 @@ async def bet(ctx, event_id, chosen_team, amount):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-# Command to end a betting event and declare the winner
-@bot.command(name='end_event')
+# Command to end a betting event and declare the winner #TODO: make team name not case sensitive and validate that the team name exists before ending the event
+@bot.command(name='end_event', help="!end_event {event_id} {winning_team} \nEnd the event and specify who won. Payouts will be given")
 async def end_event(ctx, event_id, winner_team):
     try:
         user_id = ctx.author.id
@@ -199,16 +223,25 @@ async def end_event(ctx, event_id, winner_team):
         event_id = int(event_id)
 
         # Check if the event is still active in the database
+        print("checking event active")
         if not db.is_event_active(guild_id, event_id):
             await ctx.send("Invalid event ID. Make sure the event is still active.")
             return
 
         # Check if the event has already been ended
+        print("check if event ended")
         if db.is_event_ended(guild_id, event_id):
             await ctx.send("This event has already been ended.")
             return
+        
+        # Validate that the winning team exists in the event (you need to implement this function)
+        print("check if team is valid")
+        if not db.is_valid_team(guild_id, event_id, winner_team):
+            await ctx.send(f"The specified winning team '{winner_team}' does not exist in the event.")
+            return
 
         # Set the winner and calculate payouts
+        print("calculate payout")
         winning_odds, winning_bets = db.calculate_payouts(guild_id, event_id, winner_team)
         print(winning_bets)
 
@@ -220,7 +253,7 @@ async def end_event(ctx, event_id, winner_team):
             await ctx.send(f"{ctx.guild.get_member(user_id).mention} You won {payout} points! Congratulations!")
 
         # Mark the event as ended in the database
-        db.mark_event_as_ended(guild_id, event_id)
+        db.mark_event_as_ended(guild_id, event_id, winner_team)
 
         await ctx.send(f"The winner is {winner_team}! Payouts have been processed.")
     except ValueError:
@@ -229,7 +262,7 @@ async def end_event(ctx, event_id, winner_team):
         await ctx.send(f"An error occurred: {e}")
 
 # Command to display a list of events with user bets
-@bot.command(name='events')
+@bot.command(name='events', help="!events \nGet a list of betting events currently happening")
 async def list_events(ctx):
     try:
         guild_id = ctx.guild.id
@@ -267,7 +300,7 @@ async def list_events(ctx):
         await ctx.send(f"An error occurred: {e}")
 
 # ================================= Gambling =================================== #
-@bot.command(name='50/50')
+@bot.command(name='50/50', help="!50/50 \nYou have a 50/50 chance of doubling the amount you invest")
 async def fifty_fifty(ctx, amount):
     try:
         user_id = ctx.author.id

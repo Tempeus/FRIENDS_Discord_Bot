@@ -123,7 +123,7 @@ class DiscordDatabase:
         # Commit the changes and close the connection
         self.close()
 
-    def get_top_users(self, limit=10):
+    def get_top_users(self, limit=20):
         self.connect()
 
         # Retrieve top users based on points
@@ -264,7 +264,7 @@ class DiscordDatabase:
 
         # Close the connection
         self.close()
-        return datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S")
+        return datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S.%f")
 
     def is_event_id_unique(self, guild_id, event_id):
         self.connect()
@@ -324,7 +324,7 @@ class DiscordDatabase:
         self.cursor.execute('''
             SELECT 1
             FROM betting_events
-            WHERE guild_id = ? AND event_id = ? AND (team1 = ? OR team2 = ?)
+            WHERE guild_id = ? AND event_id = ? AND (team1 COLLATE NOCASE = ? OR team2 COLLATE NOCASE = ?)
         ''', (guild_id, event_id, chosen_team, chosen_team))
 
         is_valid = bool(self.cursor.fetchone())
@@ -357,36 +357,39 @@ class DiscordDatabase:
 
         # Retrieve winning odds from the betting_events table
         self.cursor.execute('''
-            SELECT odds
+            SELECT odds, team1
             FROM betting_events
             WHERE guild_id = ? AND event_id = ?
         ''', (guild_id, event_id))
 
-        winning_odds = self.cursor.fetchone()[0] if winner_team == 'team1' else 1 / self.cursor.fetchone()[0]
+        winning_odds = self.cursor.fetchone()[0] if winner_team.lower() == self.cursor.fetchone()[1] else 1 / self.cursor.fetchone()[0]
+
+        print("winning odds", winning_odds)
 
         # Get bets for the winning team from the bets table
         self.cursor.execute('''
             SELECT user_id, amount
             FROM bets
-            WHERE guild_id = ? AND event_id = ? AND chosen_team = ?
+            WHERE guild_id = ? AND event_id = ? AND chosen_team COLLATE NOCASE = ?
         ''', (guild_id, event_id, winner_team))
 
         winning_bets = {user_id: amount for user_id, amount in self.cursor.fetchall()}
+        print(winning_bets)
 
         # Close the connection
         self.close()
 
         return winning_odds, winning_bets
 
-    def mark_event_as_ended(self, guild_id, event_id):
+    def mark_event_as_ended(self, guild_id, event_id, winner_team):
         self.connect()
 
         # Update the winner column in the betting_events table
         self.cursor.execute('''
             UPDATE betting_events
-            SET winner = 'team1'  -- Replace with the actual winner or a flag indicating the event has ended
+            SET winner = ?
             WHERE guild_id = ? AND event_id = ?
-        ''', (guild_id, event_id))
+        ''', (winner_team, guild_id, event_id))
 
         # Commit the changes and close the connection
         self.close()
@@ -398,7 +401,7 @@ class DiscordDatabase:
         self.cursor.execute('''
             SELECT user_id, amount
             FROM bets
-            WHERE guild_id = ? AND event_id = ? AND chosen_team = ?
+            WHERE guild_id = ? AND event_id = ? AND chosen_team COLLATE NOCASE = ?
         ''', (guild_id, event_id, chosen_team))
 
         team_bets = self.cursor.fetchall()
