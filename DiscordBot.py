@@ -22,6 +22,7 @@ db = DiscordDB.DiscordDatabase()
 async def on_ready():
     db.create_tables()
 
+# ================================= Points  ==================================== #
 @bot.command(name='points')
 async def check_points(ctx):
     # Check and display user points
@@ -41,6 +42,7 @@ async def leaderboard(ctx):
 
     await ctx.send(leaderboard_message)
 
+# ================================= Challenges ==================================== #
 @bot.command(name='create_challenge')
 async def add_challenge(ctx, name, points, unique_challenge=True):
     try:
@@ -292,7 +294,7 @@ async def fifty_fifty(ctx, amount):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-# DEBUGGING
+# ================================= Debugging ==================================== #
 @bot.command(name="add")
 async def add(ctx, amount):
     try:
