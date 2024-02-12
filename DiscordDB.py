@@ -57,6 +57,7 @@ class DiscordDatabase:
                 team2 TEXT,
                 odds REAL,
                 winner TEXT,
+                betting_end_time TEXT,
                 FOREIGN KEY (guild_id) REFERENCES user_points (user_id)
             )
         ''')

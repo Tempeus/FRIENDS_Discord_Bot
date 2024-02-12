@@ -1,9 +1,13 @@
 import discord
 import os
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import DiscordDB
 import random
+import datetime
+
+# Define a global variable to store the end time of the betting period
+betting_end_time = None
 
 # environment variables
 load_dotenv()
@@ -66,7 +70,7 @@ async def list_challenges(ctx):
         if challenges_list:
             challenge_str = "Challenges:\n"
             for challenge in challenges_list:
-                challenge_str += f"ID: {challenge[0]}, Name: {challenge[1]}, Points: {challenge[2]}\n"
+                challenge_str += f"ID: {challenge[0]}: {challenge[2]} point - {challenge[1]}\n"
             await ctx.send(challenge_str)
         else:
             await ctx.send("No challenges found in the database.")
@@ -125,23 +129,29 @@ async def complete_challenge(ctx, user_mention, challenge_id):
 # ================================= Betting ==================================== #
 # Command to create a new betting event
 @bot.command(name='create_event')
-async def create_event(ctx, team1, team2, odds):
+async def create_event(ctx, team1, team2, odds, duration_hours):
     try:
         guild_id = ctx.guild.id
         odds = float(odds)
+        duration_hours = int(duration_hours)
+
+        # Calculate the end time of the betting period
+        global betting_end_time
+        betting_end_time = datetime.datetime.utcnow() + datetime.timedelta(hours=duration_hours)
 
         # Create the event in the database
         event_id = db.create_event(guild_id, team1, team2, odds)
-        await ctx.send(f"Event created successfully! Event ID: {event_id}")
+
+        await ctx.send(f"Event ID: {event_id} created successfully! Betting duration ends at: " + betting_end_time.strftime("%Y-%m-%d %H:%M:%S"))
     except ValueError:
-        await ctx.send("Invalid odds. Please provide a valid float.")
+        await ctx.send("Invalid odds or duration. Please provide valid numbers.")
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-# Command to place a bet on a specific event
+# Command to place a bet
 @bot.command(name='bet')
 async def bet(ctx, event_id, chosen_team, amount):
-    try:
+    try:        
         user_id = ctx.author.id
         guild_id = ctx.guild.id
         event_id = int(event_id)
@@ -161,13 +171,17 @@ async def bet(ctx, event_id, chosen_team, amount):
         user_points = db.get_user_points(user_id)
         if amount > user_points:
             await ctx.send("You don't have enough points to place that bet.")
+
+        # Check if the betting period has ended
+        if datetime.datetime.utcnow() > betting_end_time:
+            await ctx.send("Betting period has ended.")
             return
+
+        # Place the bet in the database
+        db.place_bet(guild_id, event_id, user_id, chosen_team, amount)
 
         # Deduct points from the user's wallet
         db.update_user_points(user_id, -amount)
-
-        # Record the bet in the database
-        db.place_bet(guild_id, event_id, user_id, chosen_team, amount)
 
         await ctx.send(f"Bet placed! You bet {amount} points on {chosen_team}. Good luck!")
     except ValueError:
