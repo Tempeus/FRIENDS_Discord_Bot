@@ -1,4 +1,5 @@
 import sqlite3
+import datetime
 
 class DiscordDatabase:
     def __init__(self, db_name='discord.db'):
@@ -221,14 +222,14 @@ class DiscordDatabase:
 
     # BETTING AND EVENTS #
     
-    def create_event(self, guild_id, team1, team2, odds):
+    def create_event(self, guild_id, team1, team2, odds, betting_end_time):
         self.connect()
 
         # Insert the new event into the betting_events table
         self.cursor.execute('''
-            INSERT INTO betting_events (guild_id, team1, team2, odds, winner)
-            VALUES (?, ?, ?, ?, NULL)
-        ''', (guild_id, team1, team2, odds))
+            INSERT INTO betting_events (guild_id, team1, team2, odds, winner, betting_end_time)
+            VALUES (?, ?, ?, ?, NULL, ?)
+        ''', (guild_id, team1, team2, odds, betting_end_time))
 
         # Get the last inserted row ID, which is the auto-incremented event_id
         event_id = self.cursor.lastrowid
@@ -248,6 +249,22 @@ class DiscordDatabase:
         ''', (guild_id, event_id, user_id, team, amount))
 
         self.close()
+
+    def get_betting_end_time(self, guild_id, event_id):
+        self.connect()
+
+        # Retrieve the betting end time for the specified event
+        self.cursor.execute('''
+            SELECT betting_end_time
+            FROM betting_events
+            WHERE guild_id = ? AND event_id = ?
+        ''', (guild_id, event_id))
+
+        betting_end_time = self.cursor.fetchone()[0]
+
+        # Close the connection
+        self.close()
+        return datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S")
 
     def is_event_id_unique(self, guild_id, event_id):
         self.connect()
@@ -288,7 +305,7 @@ class DiscordDatabase:
 
         # Retrieve active events from the betting_events table
         self.cursor.execute('''
-            SELECT event_id, team1, team2, odds
+            SELECT event_id, team1, team2, odds, betting_end_time
             FROM betting_events
             WHERE guild_id = ? AND winner IS NULL
         ''', (guild_id,))

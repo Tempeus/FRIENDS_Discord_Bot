@@ -1,13 +1,10 @@
 import discord
 import os
-from discord.ext import commands, tasks
+from discord.ext import commands
 from dotenv import load_dotenv
 import DiscordDB
 import random
 import datetime
-
-# Define a global variable to store the end time of the betting period
-betting_end_time = None
 
 # environment variables
 load_dotenv()
@@ -136,13 +133,15 @@ async def create_event(ctx, team1, team2, odds, duration_hours):
         duration_hours = int(duration_hours)
 
         # Calculate the end time of the betting period
-        global betting_end_time
-        betting_end_time = datetime.datetime.utcnow() + datetime.timedelta(hours=duration_hours)
+        betting_end_time = datetime.datetime.now() + datetime.timedelta(hours=duration_hours)
 
         # Create the event in the database
-        event_id = db.create_event(guild_id, team1, team2, odds)
+        event_id = db.create_event(guild_id, team1, team2, odds, betting_end_time)
 
-        await ctx.send(f"Event ID: {event_id} created successfully! Betting duration ends at: " + betting_end_time.strftime("%Y-%m-%d %H:%M:%S"))
+        # Convert betting_end_time to Unix timestamp
+        unix_timestamp = int(betting_end_time.timestamp())
+
+        await ctx.send(f"Event ID: {event_id} created successfully! Betting duration ends at: <t:{unix_timestamp}:f> or <t:{unix_timestamp}:R>")
     except ValueError:
         await ctx.send("Invalid odds or duration. Please provide valid numbers.")
     except Exception as e:
@@ -173,7 +172,7 @@ async def bet(ctx, event_id, chosen_team, amount):
             await ctx.send("You don't have enough points to place that bet.")
 
         # Check if the betting period has ended
-        if datetime.datetime.utcnow() > betting_end_time:
+        if datetime.datetime.now() > db.get_betting_end_time(guild_id, event_id):
             await ctx.send("Betting period has ended.")
             return
 
@@ -235,6 +234,7 @@ async def list_events(ctx):
 
         # Retrieve the list of active events from the database
         active_events = db.get_active_events(guild_id)
+        print(active_events)
 
         # Check if there are any active events
         if not active_events:
@@ -244,8 +244,9 @@ async def list_events(ctx):
         # Format and send the list of active events in a Discord message
         event_list_message = "List of Active Events:\n"
         for event in active_events:
-            event_id, team1, team2, odds = event
-            event_list_message += f"Event ID: {event_id}, Teams: {team1} vs {team2}, Odds: {odds}\n"
+            event_id, team1, team2, odds, betting_end_time = event
+            unix_timestamp  = int(datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S.%f").timestamp())
+            event_list_message += f"Event ID: {event_id}, Teams: {team1} vs {team2} \nOdds: {odds} [Betting period ends at <t:{unix_timestamp}:f> or <t:{unix_timestamp}:R>]\n"
 
             # Retrieve user bets for each team from the database
             team1_bets = db.get_bets_for_team(guild_id, event_id, team1)
