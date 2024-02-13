@@ -54,4 +54,8 @@ Loading challenges
 Submitting challenges
 
 
-# TODO: HELP METHOD
+# TODO: 
+HELP METHOD
+
+# BUGS:
+Get error when trying to put a second bet on a betting event

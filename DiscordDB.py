@@ -362,7 +362,8 @@ class DiscordDatabase:
             WHERE guild_id = ? AND event_id = ?
         ''', (guild_id, event_id))
 
-        winning_odds = self.cursor.fetchone()[0] if winner_team.lower() == self.cursor.fetchone()[1] else 1 / self.cursor.fetchone()[0]
+        query_result = self.cursor.fetchone()
+        winning_odds = query_result[0] if winner_team.lower() == query_result[1].lower() else 1 / query_result[0]
 
         print("winning odds", winning_odds)
 
