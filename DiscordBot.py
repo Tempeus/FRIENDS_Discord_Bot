@@ -1,6 +1,7 @@
 import discord
 import os
 from discord.ext import commands
+from discord.ui import View, TextInput, Select
 from dotenv import load_dotenv
 import DiscordDB
 import random
@@ -276,13 +277,13 @@ async def list_events(ctx):
         if not active_events:
             await ctx.send("No active events available.")
             return
+        
+        #TODO: Add Pagination
 
         # Format and send the list of active events in a Discord message
-        event_list_message = "List of Active Events:\n"
         for event in active_events:
             event_id, team1, team2, odds1, odds2, betting_end_time = event
             unix_timestamp  = int(datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S.%f").timestamp())
-            event_list_message += f"Event ID: {event_id}, Teams: {team1} {odds1}vs {team2} {odds2} \n[Betting period ends at <t:{unix_timestamp}:f> or <t:{unix_timestamp}:R>]\n"
 
             # Retrieve user bets for each team from the database
             team1_bets = db.get_bets_for_team(guild_id, event_id, team1)
@@ -293,10 +294,19 @@ async def list_events(ctx):
             team2_bets_with_usernames = [(ctx.guild.get_member(user_id).name, amount) for user_id, amount in team2_bets]
 
             # Append user bets information to the message
-            event_list_message += f"\tBets on {team1}: {', '.join([f'{user} ({amount} points)' for user, amount in team1_bets_with_usernames])}\n"
-            event_list_message += f"\tBets on {team2}: {', '.join([f'{user} ({amount} points)' for user, amount in team2_bets_with_usernames])}\n"
+            # Create an embed to display event details
+            embed = discord.Embed(title=f"Betting Event #{event_id}", color=discord.Color.blue())
+            embed.add_field(name="Teams", value=f"{team1} vs. {team2}", inline=False)
+            embed.add_field(name="Odds", value=f"{odds1} : {odds2}", inline=False)
+            embed.add_field(name="Betting period ends", value=f"<t:{unix_timestamp}:f> or <t:{unix_timestamp}:R>", inline=False)
+            embed.add_field(name=f"Bets on {team1}", value='\n'.join([f'{user} ({amount} points)' for user, amount in team1_bets_with_usernames]))
+            embed.add_field(name=f"Bets on {team2}", value='\n'.join([f'{user} ({amount} points)' for user, amount in team2_bets_with_usernames]))
 
-        await ctx.send(event_list_message)
+            # Get user's wallet balance
+            user_balance = db.get_user_points(ctx.author.id)
+            embed.set_footer(text=f"Your Wallet Balance: {user_balance} points")
+
+            await ctx.send(embed=embed)
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 

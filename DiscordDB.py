@@ -229,7 +229,7 @@ class DiscordDatabase:
         # Insert the new event into the betting_events table
         self.cursor.execute('''
             INSERT INTO betting_events (guild_id, team1, team2, odds1, odds2, winner, betting_end_time)
-            VALUES (?, ?, ?, ?, NULL, ?)
+            VALUES (?, ?, ?, ?, ?, NULL, ?)
         ''', (guild_id, team1, team2, odds1, odds2, betting_end_time))
 
         # Get the last inserted row ID, which is the auto-incremented event_id
@@ -266,6 +266,34 @@ class DiscordDatabase:
         # Close the connection
         self.close()
         return datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S.%f")
+    
+    def get_event_details(self, guild_id, event_id):
+        self.connect()
+
+        # Retrieve event details from the betting_events table
+        self.cursor.execute('''
+            SELECT team1, team2, odds1, odds2, betting_end_time
+            FROM betting_events
+            WHERE guild_id = ? AND event_id = ?
+        ''', (guild_id, event_id))
+
+        event_details = self.cursor.fetchone()
+
+        # Close the connection
+        self.close()
+
+        if event_details:
+            # Convert the betting_end_time to a formatted string
+            event_details = {
+                'team1': event_details[0],
+                'team2': event_details[1],
+                'odds1': event_details[2],
+                'odds2': event_details[3],
+                'betting_end_time': int(datetime.datetime.strptime(event_details[4], "%Y-%m-%d %H:%M:%S.%f").timestamp())
+            }
+            return event_details
+        else:
+            return None
 
     def is_event_id_unique(self, guild_id, event_id):
         self.connect()
