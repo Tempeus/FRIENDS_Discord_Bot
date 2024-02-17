@@ -146,16 +146,17 @@ async def complete_challenge(ctx, user_mention, challenge_id):
 
 # ================================= Betting ==================================== #
 # Command to create a new betting event
-@bot.command(name='create_event', help="!create_event {team1} {team2} {odds1} {odds2} {duration_hours} \nCreates a betting event of two teams with their odds and the betting period starting now")
-async def create_event(ctx, team1, team2, odds1, odds2, duration_hours):
+@bot.command(name='create_event', help="!create_event {team1} {team2} {odds1} {odds2} {year-month-day_00:00:00} \nCreates a betting event of two teams with their odds and the betting period starting now")
+async def create_event(ctx, team1, team2, odds1, odds2, match_time):
     try:
         guild_id = ctx.guild.id
         odds1 = float(odds1)
         odds2 = float(odds2)
-        duration_hours = int(duration_hours)
+        match_time = datetime.datetime.strptime(match_time, "%Y-%m-%d_%H:%M:%S")
+        print(match_time)
 
         # Calculate the end time of the betting period
-        betting_end_time = datetime.datetime.now() + datetime.timedelta(hours=duration_hours)
+        betting_end_time = match_time
 
         # Create the event in the database
         event_id = db.create_event(guild_id, team1, team2, odds1, odds2, betting_end_time)
@@ -283,7 +284,7 @@ async def list_events(ctx):
         # Format and send the list of active events in a Discord message
         for event in active_events:
             event_id, team1, team2, odds1, odds2, betting_end_time = event
-            unix_timestamp  = int(datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S.%f").timestamp())
+            unix_timestamp  = int(datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S").timestamp())
 
             # Retrieve user bets for each team from the database
             team1_bets = db.get_bets_for_team(guild_id, event_id, team1)
