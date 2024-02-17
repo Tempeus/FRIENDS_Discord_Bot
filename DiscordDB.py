@@ -56,7 +56,8 @@ class DiscordDatabase:
                 event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 team1 TEXT,
                 team2 TEXT,
-                odds REAL,
+                odds1 REAL,
+                odds2 REAL,
                 winner TEXT,
                 betting_end_time TEXT,
                 FOREIGN KEY (guild_id) REFERENCES user_points (user_id)
@@ -222,14 +223,14 @@ class DiscordDatabase:
 
     # BETTING AND EVENTS #
     
-    def create_event(self, guild_id, team1, team2, odds, betting_end_time):
+    def create_event(self, guild_id, team1, team2, odds1, odds2, betting_end_time):
         self.connect()
 
         # Insert the new event into the betting_events table
         self.cursor.execute('''
-            INSERT INTO betting_events (guild_id, team1, team2, odds, winner, betting_end_time)
+            INSERT INTO betting_events (guild_id, team1, team2, odds1, odds2, winner, betting_end_time)
             VALUES (?, ?, ?, ?, NULL, ?)
-        ''', (guild_id, team1, team2, odds, betting_end_time))
+        ''', (guild_id, team1, team2, odds1, odds2, betting_end_time))
 
         # Get the last inserted row ID, which is the auto-incremented event_id
         event_id = self.cursor.lastrowid
@@ -305,7 +306,7 @@ class DiscordDatabase:
 
         # Retrieve active events from the betting_events table
         self.cursor.execute('''
-            SELECT event_id, team1, team2, odds, betting_end_time
+            SELECT event_id, team1, team2, odds1, odds2, betting_end_time
             FROM betting_events
             WHERE guild_id = ? AND winner IS NULL
         ''', (guild_id,))
@@ -357,13 +358,13 @@ class DiscordDatabase:
 
         # Retrieve winning odds from the betting_events table
         self.cursor.execute('''
-            SELECT odds, team1
+            SELECT odds1,odds2, team1
             FROM betting_events
             WHERE guild_id = ? AND event_id = ?
         ''', (guild_id, event_id))
 
         query_result = self.cursor.fetchone()
-        winning_odds = query_result[0] if winner_team.lower() == query_result[1].lower() else 1 / query_result[0]
+        winning_odds = query_result[0] if winner_team.lower() == query_result[2].lower() else query_result[1]
 
         print("winning odds", winning_odds)
 
@@ -417,7 +418,7 @@ class DiscordDatabase:
 
         # Retrieve all events from the betting_events table
         self.cursor.execute('''
-            SELECT event_id, team1, team2, odds
+            SELECT event_id, team1, team2, odds1, odds2
             FROM betting_events
             WHERE guild_id = ?
         ''', (guild_id,))

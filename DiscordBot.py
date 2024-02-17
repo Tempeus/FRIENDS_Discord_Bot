@@ -145,18 +145,19 @@ async def complete_challenge(ctx, user_mention, challenge_id):
 
 # ================================= Betting ==================================== #
 # Command to create a new betting event
-@bot.command(name='create_event', help="!create_event {team1} {team2} {odds} {duration_hours} \nCreates a betting event of two teams with the odds and the betting period starting now")
-async def create_event(ctx, team1, team2, odds, duration_hours):
+@bot.command(name='create_event', help="!create_event {team1} {team2} {odds1} {odds2} {duration_hours} \nCreates a betting event of two teams with their odds and the betting period starting now")
+async def create_event(ctx, team1, team2, odds1, odds2, duration_hours):
     try:
         guild_id = ctx.guild.id
-        odds = float(odds)
+        odds1 = float(odds1)
+        odds2 = float(odds2)
         duration_hours = int(duration_hours)
 
         # Calculate the end time of the betting period
         betting_end_time = datetime.datetime.now() + datetime.timedelta(hours=duration_hours)
 
         # Create the event in the database
-        event_id = db.create_event(guild_id, team1, team2, odds, betting_end_time)
+        event_id = db.create_event(guild_id, team1, team2, odds1, odds2, betting_end_time)
 
         # Convert betting_end_time to Unix timestamp
         unix_timestamp = int(betting_end_time.timestamp())
@@ -279,9 +280,9 @@ async def list_events(ctx):
         # Format and send the list of active events in a Discord message
         event_list_message = "List of Active Events:\n"
         for event in active_events:
-            event_id, team1, team2, odds, betting_end_time = event
+            event_id, team1, team2, odds1, odds2, betting_end_time = event
             unix_timestamp  = int(datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S.%f").timestamp())
-            event_list_message += f"Event ID: {event_id}, Teams: {team1} vs {team2} \nOdds: {odds} [Betting period ends at <t:{unix_timestamp}:f> or <t:{unix_timestamp}:R>]\n"
+            event_list_message += f"Event ID: {event_id}, Teams: {team1} {odds1}vs {team2} {odds2} \n[Betting period ends at <t:{unix_timestamp}:f> or <t:{unix_timestamp}:R>]\n"
 
             # Retrieve user bets for each team from the database
             team1_bets = db.get_bets_for_team(guild_id, event_id, team1)
