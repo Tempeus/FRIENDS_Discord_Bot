@@ -89,7 +89,7 @@ async def list_challenges(ctx):
         if challenges_list:
             challenge_str = "Challenges:\n"
             for challenge in challenges_list:
-                challenge_str += f"ID: {challenge[0]}: {challenge[2]} point - {challenge[1]}\n"
+                challenge_str += f"ID: {challenge[0]}: {challenge[2]} points - {challenge[1]}\n"
             await ctx.send(challenge_str)
         else:
             await ctx.send("No challenges found in the database.")
@@ -339,18 +339,18 @@ async def fifty_fifty(ctx, amount):
         await ctx.send(f"An error occurred: {e}")
 
 # ================================= Debugging ==================================== #
-@bot.command(name="add")
-async def add(ctx, amount):
-    try:
-        user_id = ctx.author.id
-        amount = int(amount)
+# @bot.command(name="add")
+# async def add(ctx, amount):
+#     try:
+#         user_id = ctx.author.id
+#         amount = int(amount)
 
-        db.update_user_points(user_id, amount)
-        await ctx.send("sent " + str(amount))
-    except ValueError:
-        await ctx.send("Invalid user ID or points. Please provide valid integers.")
-    except Exception as e:
-        await ctx.send(f"An error occurred: {e}")
+#         db.update_user_points(user_id, amount)
+#         await ctx.send("sent " + str(amount))
+#     except ValueError:
+#         await ctx.send("Invalid user ID or points. Please provide valid integers.")
+#     except Exception as e:
+#         await ctx.send(f"An error occurred: {e}")
 
 bot.run(TOKEN)
 
