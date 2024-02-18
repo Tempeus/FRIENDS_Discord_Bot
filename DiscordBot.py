@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import DiscordDB
 import random
 import datetime
+import PaginationView
 
 # environment variables
 load_dotenv()
@@ -217,7 +218,7 @@ async def bet(ctx, event_id, chosen_team, amount):
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
-# Command to end a betting event and declare the winner #TODO: make team name not case sensitive and validate that the team name exists before ending the event
+# Command to end a betting event and declare the winner 
 @bot.command(name='end_event', help="!end_event {event_id} {winning_team} \nEnd the event and specify who won. Payouts will be given")
 async def end_event(ctx, event_id, winner_team):
     try:
@@ -272,16 +273,14 @@ async def list_events(ctx):
 
         # Retrieve the list of active events from the database
         active_events = db.get_active_events(guild_id)
-        print(active_events)
 
         # Check if there are any active events
         if not active_events:
             await ctx.send("No active events available.")
             return
         
-        #TODO: Add Pagination
-
         # Format and send the list of active events in a Discord message
+        event_list = []
         for event in active_events:
             event_id, team1, team2, odds1, odds2, betting_end_time = event
             unix_timestamp  = int(datetime.datetime.strptime(betting_end_time, "%Y-%m-%d %H:%M:%S").timestamp())
@@ -293,21 +292,21 @@ async def list_events(ctx):
             # Convert user IDs to usernames
             team1_bets_with_usernames = [(ctx.guild.get_member(user_id).name, amount) for user_id, amount in team1_bets]
             team2_bets_with_usernames = [(ctx.guild.get_member(user_id).name, amount) for user_id, amount in team2_bets]
-
-            # Append user bets information to the message
-            # Create an embed to display event details
-            embed = discord.Embed(title=f"Betting Event #{event_id}", color=discord.Color.blue())
-            embed.add_field(name="Teams", value=f"{team1} vs. {team2}", inline=False)
-            embed.add_field(name="Odds", value=f"{odds1} : {odds2}", inline=False)
-            embed.add_field(name="Betting period ends", value=f"<t:{unix_timestamp}:f> or <t:{unix_timestamp}:R>", inline=False)
-            embed.add_field(name=f"Bets on {team1}", value='\n'.join([f'{user} ({amount} points)' for user, amount in team1_bets_with_usernames]))
-            embed.add_field(name=f"Bets on {team2}", value='\n'.join([f'{user} ({amount} points)' for user, amount in team2_bets_with_usernames]))
-
-            # Get user's wallet balance
             user_balance = db.get_user_points(ctx.author.id)
-            embed.set_footer(text=f"Your Wallet Balance: {user_balance} points")
-
-            await ctx.send(embed=embed)
+            event_list.append({
+                "event_id": event_id,
+                "team1": team1,
+                "team2": team2,
+                "odds1": odds1,
+                "odds2": odds2,
+                "unix_timestamp": unix_timestamp,
+                "team1_bets_with_usernames" : team1_bets_with_usernames,
+                "team2_bets_with_usernames": team2_bets_with_usernames,
+                "user_balance": user_balance
+            })
+        pagination_view = PaginationView.PaginationView()
+        pagination_view.data = event_list
+        await pagination_view.send(ctx)
     except Exception as e:
         await ctx.send(f"An error occurred: {e}")
 
